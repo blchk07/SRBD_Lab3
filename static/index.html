@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoPartsDB</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="wrap header-row">
+      <div class="title">AutoPartsDB</div>
+      <nav class="nav">
+        <a href="#" class="nav-link active" data-tab="goods">Товари та продажі</a>
+        <a href="#" class="nav-link" data-tab="procedures">Процедури</a>
+        <a href="#" class="nav-link" data-tab="functions">Функції</a>
+        <a href="#" class="nav-link" data-tab="logs">Логи тригерів</a>
+        <a href="/docs" target="_blank" class="nav-swagger">Swagger</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap content">
+    <div id="global-alert" class="msg hidden"></div>
+
+    <!-- товари і продажі -->
+    <section id="tab-goods" class="tab active">
+      <div class="row-head">
+        <h2>Товари та їх продажі</h2>
+        <button id="btn-refresh-goods" type="button">Оновити</button>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <h3>Список товарів (натисніть рядок для перегляду)</h3>
+          <table id="goods-table" class="tbl clickable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Назва</th>
+                <th>Відділ</th>
+                <th>Ціна, грн</th>
+                <th>Залишок</th>
+                <th>Продажів</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3>Детальна інформація про товар</h3>
+          <table class="tbl kv-table">
+            <tbody id="good-info-body">
+              <tr><td colspan="2">Оберіть товар у таблиці ліворуч</td></tr>
+            </tbody>
+          </table>
+
+          <h3>Продажі обраного товару</h3>
+          <table id="good-sales-table" class="tbl">
+            <thead>
+              <tr>
+                <th>Чек №</th>
+                <th>Дата</th>
+                <th>Покупець</th>
+                <th>Місто</th>
+                <th>К-сть</th>
+                <th>Сума, грн</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6">Немає даних</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- процедури і помилки -->
+    <section id="tab-procedures" class="tab">
+      <h2>Збережені процедури</h2>
+
+      <div id="proc-result-box" class="msg hidden"></div>
+
+      <div class="test-bar">
+        <span>Тест виключень SQL Server:</span>
+        <button type="button" id="btn-err-empty-dept">Порожня назва (50001)</button>
+        <button type="button" id="btn-err-neg-price">Ціна -100 (50004)</button>
+        <button type="button" id="btn-err-stock">Кількість 9999 (50011)</button>
+        <button type="button" id="btn-err-discount">Знижка 150% (50013)</button>
+      </div>
+
+      <div class="forms-grid">
+        <fieldset class="box">
+          <legend>usp_InsertDepartment (додати відділ)</legend>
+          <form id="form-department" novalidate>
+            <label>Назва підрозділу:
+              <input type="text" id="dept-name" placeholder="Наприклад: Кузовні деталі">
+            </label>
+            <label>Опис:
+              <input type="text" id="dept-info" placeholder="Необов'язково">
+            </label>
+            <button type="submit">Додати відділ</button>
+          </form>
+        </fieldset>
+
+        <fieldset class="box">
+          <legend>usp_UpdateGoodPrice (змінити ціну)</legend>
+          <form id="form-price" novalidate>
+            <label>Товар:
+              <select id="price-good-id"></select>
+            </label>
+            <label>Нова ціна, грн:
+              <input type="number" step="0.01" id="price-value" value="480.00">
+            </label>
+            <button type="submit">Оновити ціну</button>
+          </form>
+        </fieldset>
+
+        <fieldset class="box">
+          <legend>usp_SetGoodDiscount (встановити знижку)</legend>
+          <form id="form-discount" novalidate>
+            <label>Товар:
+              <select id="discount-good-id"></select>
+            </label>
+            <label>Знижка (1–99%):
+              <input type="number" id="discount-value" value="10">
+            </label>
+            <button type="submit">Записати знижку</button>
+          </form>
+        </fieldset>
+
+        <fieldset class="box">
+          <legend>usp_ProcessSale (оформити продаж)</legend>
+          <form id="form-sale" novalidate>
+            <label>Товар:
+              <select id="sale-good-id"></select>
+            </label>
+            <label>Кількість:
+              <input type="number" id="sale-qty" value="1">
+            </label>
+            <label>Номер чеку (порожньо — авто):
+              <input type="number" id="sale-check">
+            </label>
+            <button type="submit">Провести продаж</button>
+          </form>
+        </fieldset>
+      </div>
+
+      <div class="row-head">
+        <h3>Таблиця Departments</h3>
+        <button id="btn-refresh-depts" type="button">Оновити</button>
+      </div>
+      <table id="departments-table" class="tbl">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Назва</th>
+            <th>Інформація (Info)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- функції -->
+    <section id="tab-functions" class="tab">
+      <h2>Функції бази даних (ЛБ1)</h2>
+
+      <fieldset class="box">
+        <legend>Скалярні функції: fn_CountGoodsBelowAveragePrice та fn_GetGoodsCountByPriceLimit</legend>
+        <form id="form-scalar" class="inline-form" novalidate>
+          <label>Гранична ціна, грн:
+            <input type="number" step="100" id="scalar-max-price" value="3000">
+          </label>
+          <button type="submit">Обчислити</button>
+        </form>
+        <table class="tbl kv-table">
+          <thead>
+            <tr>
+              <th>Показник</th>
+              <th>Значення</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Середня ціна товарів</td><td id="res-avg-price">—</td></tr>
+            <tr><td>Товарів дешевше за середню (fn_CountGoodsBelowAveragePrice)</td><td id="res-below-avg">—</td></tr>
+            <tr><td>Товарів у межах ліміту (fn_GetGoodsCountByPriceLimit)</td><td id="res-within-limit">—</td></tr>
+          </tbody>
+        </table>
+      </fieldset>
+
+      <fieldset class="box">
+        <legend>Таблична функція: fn_GetDepartmentSalesReport(@DeptId)</legend>
+        <form id="form-dept-report" class="inline-form" novalidate>
+          <label>Підрозділ:
+            <select id="report-dept-id"></select>
+          </label>
+          <button type="submit">Показати звіт</button>
+        </form>
+        <table id="dept-report-table" class="tbl">
+          <thead>
+            <tr>
+              <th>Підрозділ</th>
+              <th>ID</th>
+              <th>Товар</th>
+              <th>Ціна, грн</th>
+              <th>Продано, шт.</th>
+              <th>Виручка, грн</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </fieldset>
+
+      <fieldset class="box">
+        <legend>Таблична функція (варіант 11): fn_GetTopSoldGoodByWorker(@WorkerName)</legend>
+        <form id="form-worker-top" class="inline-form" novalidate>
+          <label>Працівник:
+            <select id="worker-select"></select>
+          </label>
+          <label>або вручну:
+            <input type="text" id="worker-custom" placeholder="ПІБ працівника">
+          </label>
+          <button type="submit">Знайти</button>
+        </form>
+        <table id="worker-top-table" class="tbl">
+          <thead>
+            <tr>
+              <th>Працівник</th>
+              <th>Найменування товару</th>
+              <th>Продано, шт.</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </fieldset>
+    </section>
+
+    <!-- логи тригерів -->
+    <section id="tab-logs" class="tab">
+      <div class="row-head">
+        <h2>Журнали тригерів (ЛБ2)</h2>
+        <button id="btn-refresh-logs" type="button">Оновити</button>
+      </div>
+
+      <h3>SalesLogs (tr_SalesLogging)</h3>
+      <table id="sales-logs-table" class="tbl">
+        <thead>
+          <tr>
+            <th>Id</th>
+            <th>SaleId</th>
+            <th>Було шт.</th>
+            <th>Стало шт.</th>
+            <th>Дата зміни</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>GoodsAccessLogs (tr_GoodsWeekendGuard)</h3>
+      <table id="access-logs-table" class="tbl">
+        <thead>
+          <tr>
+            <th>LogId</th>
+            <th>Назва товару</th>
+            <th>Дата спроби</th>
+            <th>Користувач</th>
+            <th>Повідомлення</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
