@@ -26,9 +26,10 @@ async function apiRequest(url, options = {}) {
   return data;
 }
 
-function showMsg(boxId, isOk, title, text) {
+function showMsg(boxId, status, title, text) {
   const box = document.getElementById(boxId);
-  box.className = "msg " + (isOk ? "ok" : "err");
+  const cls = status === true ? "ok" : status === false ? "err" : status;
+  box.className = "msg " + cls;
   box.innerHTML = `<strong>${esc(title)}</strong><br>${esc(text)}`;
 }
 
@@ -145,11 +146,7 @@ async function selectGood(goodId) {
 async function loadDepartments() {
   const depts = await apiRequest("/api/departments");
   const tbody = document.querySelector("#departments-table tbody");
-  const sel = document.getElementById("report-dept-id");
-  const prev = sel.value;
-
   tbody.innerHTML = "";
-  sel.innerHTML = "";
 
   depts.forEach((d) => {
     const tr = document.createElement("tr");
@@ -159,15 +156,42 @@ async function loadDepartments() {
       <td>${esc(d.Info || "-")}</td>
     `;
     tbody.appendChild(tr);
-
-    const opt = document.createElement("option");
-    opt.value = d.DeptId;
-    opt.textContent = `#${d.DeptId} ${d.Name}`;
-    sel.appendChild(opt);
   });
 
-  if (prev && depts.some((d) => String(d.DeptId) === prev)) {
+  ["report-dept-id", "new-good-dept"].forEach((id) => {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    sel.innerHTML = "";
+    depts.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.DeptId;
+      opt.textContent = `#${d.DeptId} ${d.Name}`;
+      sel.appendChild(opt);
+    });
+    if (prev && depts.some((d) => String(d.DeptId) === prev)) {
+      sel.value = prev;
+    }
+  });
+}
+
+async function loadSalesSelect() {
+  const sales = await apiRequest("/api/sales");
+  const sel = document.getElementById("upd-sale-id");
+  const prev = sel.value;
+  sel.innerHTML = "";
+  sales.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.SaleId;
+    opt.dataset.qty = s.Quantity;
+    opt.textContent = `#${s.SaleId} (Чек ${s.CheckNo}) — ${s.GoodName} (${s.Quantity} шт.)`;
+    sel.appendChild(opt);
+  });
+  if (prev && sales.some((s) => String(s.SaleId) === prev)) {
     sel.value = prev;
+  }
+  const currentOpt = sel.options[sel.selectedIndex];
+  if (currentOpt && currentOpt.dataset.qty) {
+    document.getElementById("upd-sale-qty").value = Number(currentOpt.dataset.qty) + 1;
   }
 }
 
@@ -361,13 +385,61 @@ document.getElementById("btn-refresh-goods").addEventListener("click", () => {
 document.getElementById("btn-refresh-depts").addEventListener("click", () => {
   loadDepartments().catch((err) => showApiError("global-alert", err));
 });
+document.getElementById("upd-sale-id").addEventListener("change", (e) => {
+  const opt = e.target.options[e.target.selectedIndex];
+  if (opt && opt.dataset.qty) {
+    document.getElementById("upd-sale-qty").value = Number(opt.dataset.qty) + 1;
+  }
+});
+
+document.getElementById("form-update-sale").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const saleId = Number(document.getElementById("upd-sale-id").value || 0);
+  const qty = Number(document.getElementById("upd-sale-qty").value || 0);
+  try {
+    const res = await apiRequest(`/api/sales/${saleId}`, {
+      method: "PUT",
+      body: JSON.stringify({ quantity: qty }),
+    });
+    showMsg("logs-result-box", "ok", "Виконано", res.message);
+    await Promise.all([loadLogs(), loadSalesSelect(), loadGoods()]);
+  } catch (err) {
+    showApiError("logs-result-box", err);
+  }
+});
+
+document.getElementById("form-add-good").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const res = await apiRequest("/api/goods", {
+      method: "POST",
+      body: JSON.stringify({
+        name: document.getElementById("new-good-name").value,
+        producer: document.getElementById("new-good-producer").value,
+        price: Number(document.getElementById("new-good-price").value || 0),
+        quantity: Number(document.getElementById("new-good-qty").value || 0),
+        dept_id: Number(document.getElementById("new-good-dept").value || 1),
+        description: document.getElementById("new-good-desc").value,
+      }),
+    });
+    if (res.blocked_by_trigger) {
+      showMsg("logs-result-box", "warn", "Вставку заблоковано на боці БД", res.message);
+    } else {
+      showMsg("logs-result-box", "ok", "Виконано", res.message);
+    }
+    await Promise.all([loadLogs(), loadGoods()]);
+  } catch (err) {
+    showApiError("logs-result-box", err);
+  }
+});
+
 document.getElementById("btn-refresh-logs").addEventListener("click", () => {
-  loadLogs().catch((err) => showApiError("global-alert", err));
+  Promise.all([loadLogs(), loadSalesSelect()]).catch((err) => showApiError("global-alert", err));
 });
 
 async function init() {
   try {
-    await Promise.all([loadGoods(), loadDepartments(), loadWorkers(), loadLogs()]);
+    await Promise.all([loadGoods(), loadDepartments(), loadWorkers(), loadLogs(), loadSalesSelect()]);
     await Promise.all([loadScalarFunctions(), loadDeptReport(), loadWorkerTopGood()]);
   } catch (err) {
     showApiError("global-alert", err);

@@ -241,8 +241,52 @@
     <!-- логи тригерів -->
     <section id="tab-logs" class="tab">
       <div class="row-head">
-        <h2>Журнали тригерів (ЛБ2)</h2>
+        <h2>Робота та журнали тригерів (ЛБ2)</h2>
         <button id="btn-refresh-logs" type="button">Оновити</button>
+      </div>
+
+      <div id="logs-result-box" class="msg hidden"></div>
+
+      <div class="forms-grid">
+        <fieldset class="box">
+          <legend>Змінити кількість у продажі (тригер tr_SalesLogging)</legend>
+          <form id="form-update-sale" novalidate>
+            <label>Оберіть продаж (Sales):
+              <select id="upd-sale-id"></select>
+            </label>
+            <label>Нова кількість, шт.:
+              <input type="number" id="upd-sale-qty" value="2">
+            </label>
+            <button type="submit">Оновити кількість</button>
+          </form>
+        </fieldset>
+
+        <fieldset class="box">
+          <legend>Додати товар у Goods (тригер tr_GoodsWeekendGuard)</legend>
+          <form id="form-add-good" novalidate>
+            <label>Назва товару:
+              <input type="text" id="new-good-name" placeholder="Наприклад: Фільтр паливний">
+            </label>
+            <label>Виробник:
+              <input type="text" id="new-good-producer" placeholder="Наприклад: Bosch">
+            </label>
+            <div class="two-col">
+              <label>Ціна, грн:
+                <input type="number" step="0.01" id="new-good-price" value="420.00">
+              </label>
+              <label>Кількість:
+                <input type="number" id="new-good-qty" value="10">
+              </label>
+            </div>
+            <label>Підрозділ:
+              <select id="new-good-dept"></select>
+            </label>
+            <label>Опис:
+              <input type="text" id="new-good-desc" placeholder="Необов'язково">
+            </label>
+            <button type="submit">Додати товар</button>
+          </form>
+        </fieldset>
       </div>
 
       <h3>SalesLogs (tr_SalesLogging)</h3>

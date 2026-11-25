@@ -4,7 +4,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from db import SqlServerException, execute_procedure, fetch_all, fetch_one
+from db import (
+    SqlServerException,
+    execute_dml,
+    execute_procedure,
+    fetch_all,
+    fetch_one,
+    insert_good_with_guard,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -47,6 +54,19 @@ class SaleCreate(BaseModel):
     good_id: int
     quantity: int = 1
     check_no: int | None = None
+
+
+class SaleQuantityUpdate(BaseModel):
+    quantity: int
+
+
+class GoodCreate(BaseModel):
+    name: str
+    price: float
+    quantity: int = 1
+    producer: str
+    dept_id: int
+    description: str | None = None
 
 
 @app.get("/", include_in_schema=False)
@@ -148,6 +168,56 @@ def get_trigger_logs():
         "SELECT LogId, GoodName, AttemptDate, UserName, StatusMessage FROM GoodsAccessLogs ORDER BY LogId DESC"
     )
     return {"sales_logs": sales_logs, "access_logs": access_logs}
+
+
+@app.get("/api/sales")
+def get_sales():
+    return fetch_all(
+        """
+        SELECT TOP 30 s.SaleId, s.CheckNo, s.GoodId, g.Name AS GoodName, s.SaleDate, s.Quantity
+        FROM Sales s
+        JOIN Goods g ON s.GoodId = g.GoodId
+        ORDER BY s.SaleId DESC
+        """
+    )
+
+
+@app.put("/api/sales/{sale_id}")
+def update_sale_quantity(sale_id: int, payload: SaleQuantityUpdate):
+    affected = execute_dml(
+        "UPDATE Sales SET Quantity = ? WHERE SaleId = ?",
+        (payload.quantity, sale_id),
+    )
+    if affected == 0:
+        raise HTTPException(status_code=404, detail=f"Продаж із SaleId={sale_id} не знайдено")
+    return {
+        "status": "ok",
+        "message": f"Кількість у продажі #{sale_id} змінено на {payload.quantity} шт. (спрацював тригер tr_SalesLogging)",
+    }
+
+
+@app.post("/api/goods")
+def create_good(payload: GoodCreate):
+    name = payload.name.strip()
+    producer = payload.producer.strip()
+    if not name or not producer:
+        raise HTTPException(status_code=400, detail="Назва товару та виробник не можуть бути порожніми")
+
+    desc = payload.description.strip() if payload.description and payload.description.strip() else None
+    result = insert_good_with_guard(
+        (name, payload.price, payload.quantity, producer, payload.dept_id, desc)
+    )
+    if result["blocked"]:
+        return {
+            "status": "blocked",
+            "blocked_by_trigger": True,
+            "message": f"Тригер tr_GoodsWeekendGuard: {result['log_message']}",
+        }
+    return {
+        "status": "ok",
+        "blocked_by_trigger": False,
+        "message": f"Товар «{name}» успішно додано в каталог Goods",
+    }
 
 
 @app.post("/api/procedures/department", status_code=201)

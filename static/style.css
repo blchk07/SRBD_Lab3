@@ -269,6 +269,12 @@ button[type="submit"]:hover {
   color: #8b1e1b;
 }
 
+.msg.warn {
+  background-color: #fff8e1;
+  border-color: #d97706;
+  color: #7c2d12;
+}
+
 .status-ok {
   color: #1b5e20;
   font-weight: bold;

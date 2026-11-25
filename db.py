@@ -48,8 +48,8 @@ def parse_odbc_error(exc: pyodbc.Error, procedure: str = "") -> SqlServerExcepti
     sqlstate = str(exc.args[0]) if exc.args else "HY000"
     raw_msg = str(exc.args[1]) if len(exc.args) > 1 else str(exc)
 
-    # дістаємо текст повідомлення і код помилки з відповіді SQL Server
-    match = re.search(r"\[SQL Server\](.*?)\s*\((\d+)\)\s*\([^)]+\)\s*$", raw_msg, re.DOTALL)
+    # дістаємо текст повідомлення і код помилки з першого запису SQL Server
+    match = re.search(r"\[SQL Server\](.*?)\s*\((\d+)\)\s*\([^)]+\)", raw_msg, re.DOTALL)
     if match:
         return SqlServerException(
             sqlstate=sqlstate,
@@ -93,5 +93,57 @@ def execute_procedure(sql: str, params: tuple = (), proc_name: str = "") -> None
     except pyodbc.Error as exc:
         conn.rollback()
         raise parse_odbc_error(exc, procedure=proc_name) from exc
+    finally:
+        conn.close()
+
+
+def execute_dml(sql: str, params: tuple = ()) -> int:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        affected = cursor.rowcount
+        while cursor.nextset():
+            pass
+        conn.commit()
+        return affected
+    except pyodbc.Error as exc:
+        conn.rollback()
+        raise parse_odbc_error(exc) from exc
+    finally:
+        conn.close()
+
+
+def insert_good_with_guard(params: tuple) -> dict:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT ISNULL(MAX(LogId), 0) FROM GoodsAccessLogs")
+        prev_log_id = cursor.fetchone()[0]
+
+        cursor.execute(
+            """
+            INSERT INTO Goods (Name, Price, Quantity, Producer, DeptId, Description)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            params,
+        )
+        while cursor.nextset():
+            pass
+
+        # перевіряємо, чи записав INSTEAD OF тригер спробу блокування у вихідний день
+        cursor.execute(
+            "SELECT TOP 1 StatusMessage FROM GoodsAccessLogs WHERE LogId > ? ORDER BY LogId DESC",
+            (prev_log_id,),
+        )
+        log_row = cursor.fetchone()
+        conn.commit()
+
+        if log_row:
+            return {"blocked": True, "log_message": log_row[0]}
+        return {"blocked": False, "log_message": None}
+    except pyodbc.Error as exc:
+        conn.rollback()
+        raise parse_odbc_error(exc) from exc
     finally:
         conn.close()
